@@ -1,0 +1,98 @@
+#include <ESP8266WiFi.h>
+#include <FirebaseESP8266.h>
+
+// Wi-Fi 정보
+const char* ssid = "Your_SSID";       // Wi-Fi SSID
+const char* password = "Your_Password"; // Wi-Fi 비밀번호
+
+// Firebase 정보
+#define FIREBASE_HOST "iotai-ada9c-default-rtdb.firebaseio.com"
+#define FIREBASE_AUTH "fh34lMfrJvoZ4yJGBCf0mxoXTlZYjNQR1QvhYTPt"
+
+// 모터 제어 핀
+const int IN1 = D1; // L298N IN1 핀
+const int IN2 = D2; // L298N IN2 핀
+const int ENA = D3; // L298N ENA 핀
+
+// LED 제어 핀
+const int LED_PIN = D4; // ESP8266에 연결된 LED 핀
+
+// Firebase 객체 생성
+FirebaseData firebaseData;
+
+void setup() {
+  // 직렬 통신 시작
+  Serial.begin(115200);
+  delay(1000);
+
+  // Wi-Fi 연결
+  WiFi.begin(ssid, password);
+  Serial.print("Connecting to Wi-Fi");
+  while (WiFi.status() != WL_CONNECTED) {
+    Serial.print(".");
+    delay(500);
+  }
+  Serial.println("\nConnected to Wi-Fi!");
+
+  // Firebase 초기화
+  Firebase.begin(FIREBASE_HOST, FIREBASE_AUTH);
+  Firebase.reconnectWiFi(true);
+
+  // 모터 핀 초기화
+  pinMode(IN1, OUTPUT);
+  pinMode(IN2, OUTPUT);
+  pinMode(ENA, OUTPUT);
+  digitalWrite(IN1, LOW);
+  digitalWrite(IN2, LOW);
+  analogWrite(ENA, 0);
+
+  // LED 핀 초기화
+  pinMode(LED_PIN, OUTPUT);
+  digitalWrite(LED_PIN, LOW);
+}
+
+void loop() {
+  // Firebase에서 창문/MOTOR 값 읽기
+  if (Firebase.getInt(firebaseData, "/창문/MOTOR")) {
+    if (firebaseData.dataType() == "int") {
+      int motorState = firebaseData.intData();
+      if (motorState == 1) {
+        // 모터 회전 중
+        Serial.println("Motor ON: 30RPM");
+        digitalWrite(IN1, HIGH);
+        digitalWrite(IN2, LOW);
+        analogWrite(ENA, 128); // 속도 조정 (0~255 중 128 설정)
+      } else if (motorState == 0) {
+        // 모터 정지
+        Serial.println("Motor OFF");
+        digitalWrite(IN1, LOW);
+        digitalWrite(IN2, LOW);
+        analogWrite(ENA, 0);
+      }
+    }
+  } else {
+    Serial.println("Failed to read MOTOR from Firebase:");
+    Serial.println(firebaseData.errorReason());
+  }
+
+  // Firebase에서 전등/LED 값 읽기
+  if (Firebase.getInt(firebaseData, "/전등/LED")) {
+    if (firebaseData.dataType() == "int") {
+      int ledState = firebaseData.intData();
+      if (ledState == 1) {
+        // LED ON
+        Serial.println("LED ON");
+        digitalWrite(LED_PIN, HIGH);
+      } else if (ledState == 0) {
+        // LED OFF
+        Serial.println("LED OFF");
+        digitalWrite(LED_PIN, LOW);
+      }
+    }
+  } else {
+    Serial.println("Failed to read LED from Firebase:");
+    Serial.println(firebaseData.errorReason());
+  }
+
+  delay(100); // 0.1초 간격으로 Firebase 확인
+}
